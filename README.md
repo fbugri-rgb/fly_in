@@ -27,6 +27,8 @@ Requires Python 3.10+ (checked with 3.10.12).
 make install                  # install flake8 / mypy / pytest into your env
 make run                      # run on maps/easy/01_linear_path.txt
 make run MAP=maps/hard/02_capacity_hell.txt
+make visual                   # same, plus the colored per-turn snapshot
+make visual MAP=maps/hard/03_ultimate_challenge.txt
 make debug MAP=maps/…         # run under pdb
 make lint                     # flake8 + mypy (project-required flags)
 make lint-strict              # flake8 + mypy --strict
