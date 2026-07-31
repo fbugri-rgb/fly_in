@@ -29,6 +29,8 @@ make run                      # run on maps/easy/01_linear_path.txt
 make run MAP=maps/hard/02_capacity_hell.txt
 make visual                   # same, plus the colored per-turn snapshot
 make visual MAP=maps/hard/03_ultimate_challenge.txt
+make gui                      # open a tkinter window and animate the run
+make gui MAP=maps/hard/03_ultimate_challenge.txt
 make debug MAP=maps/…         # run under pdb
 make lint                     # flake8 + mypy (project-required flags)
 make lint-strict              # flake8 + mypy --strict
@@ -36,15 +38,20 @@ make test                     # pytest
 make clean                    # remove caches
 ```
 
-The main script also takes `--render` (or `-r`) for a colored per-turn
-snapshot on stderr:
+The main script accepts a visualization flag:
+
+- `--render` (or `-r`) — colored per-turn snapshot on stderr
+- `--gui` (or `-g`) — tkinter window animating the run
 
 ```
 python main.py --render maps/medium/03_priority_puzzle.txt
+python main.py --gui    maps/hard/03_ultimate_challenge.txt
 ```
 
 The SPEC §6 move lines still go to stdout so a grader can pipe them
-independently of the visualization.
+independently of the visualization. `--gui` needs `tkinter` (stdlib on
+most Python builds; on Debian/Ubuntu install with
+`sudo apt install python3-tk` if missing) and an active display.
 
 ## Algorithm choices and implementation strategy
 
@@ -107,7 +114,12 @@ Results on the shipped maps:
 
 ## Visual representation
 
-`--render` prints a per-turn snapshot to stderr. Each snapshot lists:
+Two independent visualizers are provided, satisfying both options
+offered by the SPEC (colored terminal *and* graphical interface).
+
+### Terminal (`--render` / `make visual`)
+
+Prints a per-turn snapshot to stderr. Each snapshot lists:
 
 - the turn number and total turns
 - how many drones have been delivered so far
@@ -120,6 +132,27 @@ ANSI foreground colors are used when stderr is a TTY. The color palette
 covers `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `orange`,
 `purple`, `gold`, `lime`, `brown`, `gray`, `pink` — unknown color names
 render plain (per SPEC, color is "any single-word string").
+
+### Graphical (`--gui` / `make gui`)
+
+Opens a tkinter window that animates the simulation turn by turn (500 ms
+per turn). Layout:
+
+- **Zones** are drawn as filled circles at their `(x, y)` map
+  coordinates (auto-scaled to fit the window; Y is flipped so map-up is
+  screen-up). Fill color comes from the `color=` metadata; the zone
+  **type** is signaled by outline color — red for restricted, green for
+  priority, gray for blocked, dark gray for normal. Zone name labels sit
+  above each circle.
+- **Connections** are drawn as gray lines between zones.
+- **Drones** are dark dots with their ID inside. When a zone holds
+  multiple drones, they arrange in a small ring so they don't stack.
+- **Mid-transit drones** are drawn along the midpoint of the connection
+  they occupy, offset perpendicularly when several share the connection.
+- The **header** shows `Turn N / T  —  delivered X / N`.
+
+The window stays open when the simulation ends so you can inspect the
+final state; close the window to exit.
 
 ## Example
 

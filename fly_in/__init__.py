@@ -10,7 +10,7 @@ from fly_in.exceptions import FlyInError, NoSolutionError, ParseError, Simulatio
 from fly_in.graph import Graph
 from fly_in.parser import Parser
 from fly_in.pathfinder import PathFinder
-from fly_in.renderer import Renderer
+from fly_in.renderer import Renderer, RendererProtocol
 from fly_in.scheduler import Scheduler
 from fly_in.simulation import Simulation
 from fly_in.zone import Zone, ZoneType
@@ -25,6 +25,7 @@ __all__ = [
     "Parser",
     "PathFinder",
     "Renderer",
+    "RendererProtocol",
     "Scheduler",
     "Simulation",
     "SimulationError",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fly_in.drone import Drone
 from fly_in.graph import Graph
 from fly_in.parser import Parser
-from fly_in.renderer import Renderer
+from fly_in.renderer import RendererProtocol
 from fly_in.scheduler import Scheduler
 
 
@@ -27,7 +27,7 @@ class Simulation:
             Drone(id=i + 1, location=graph.start) for i in range(nb_drones)
         ]
 
-    def run(self, renderer: Renderer | None = None) -> int:
+    def run(self, renderer: RendererProtocol | None = None) -> int:
         """Run the simulation, emit SPEC §6 output, return total turns.
 
         SPEC-compliant move lines are printed to stdout each turn. If a

@@ -10,8 +10,20 @@ from __future__ import annotations
 
 import sys
 from collections import defaultdict
+from typing import Protocol
 
 from fly_in.graph import Graph
+
+
+class RendererProtocol(Protocol):
+    """Structural type shared by terminal and graphical renderers."""
+
+    def render_turn(
+        self, turn_idx: int, total_turns: int, positions: dict[int, str]
+    ) -> None:
+        """Emit or draw a snapshot of drone positions at end of ``turn_idx``."""
+        ...
+
 
 # Best-effort mapping from human-color names (any string per spec) to
 # a small palette of ANSI foreground codes. Unknown names render plain.
