@@ -1,11 +1,13 @@
 """Command-line entry point.
 
 Usage:
-    python main.py [--render | --gui] <map_file>
+    python main.py [--render | --gui [--step]] <map_file>
 
 --render prints a colored per-turn snapshot to stderr in addition to the
 SPEC §6 move lines on stdout.
 --gui opens a tkinter window and animates the simulation turn by turn.
+--step (only with --gui) waits for a keypress before every turn, useful
+for demoing to a reviewer.
 
 Exits non-zero on any parse/simulation error and never propagates an
 unhandled exception (SPEC §9).
@@ -20,32 +22,37 @@ from fly_in.renderer import Renderer, RendererProtocol
 from fly_in.simulation import Simulation
 
 
-def _parse_argv(argv: list[str]) -> tuple[str, bool, bool]:
-    """Return ``(map_path, render_flag, gui_flag)``. Raises ``ValueError`` on misuse."""
+def _parse_argv(argv: list[str]) -> tuple[str, bool, bool, bool]:
+    """Return ``(map_path, render, gui, step)``. Raises ``ValueError`` on misuse."""
     render = False
     gui = False
+    step = False
     positional: list[str] = []
     for arg in argv[1:]:
         if arg in ("--render", "-r"):
             render = True
         elif arg in ("--gui", "-g"):
             gui = True
+        elif arg == "--step":
+            step = True
         elif arg in ("--help", "-h"):
             raise ValueError("help")
         else:
             positional.append(arg)
     if len(positional) != 1:
         raise ValueError("expected one map file argument")
-    return positional[0], render, gui
+    if step and not gui:
+        raise ValueError("--step requires --gui")
+    return positional[0], render, gui, step
 
 
 def main(argv: list[str]) -> int:
     """Run the simulator; return a process exit code."""
     try:
-        map_path, render_flag, gui_flag = _parse_argv(argv)
+        map_path, render_flag, gui_flag, step_flag = _parse_argv(argv)
     except ValueError:
         print(
-            f"usage: {argv[0]} [--render | --gui] <map_file>",
+            f"usage: {argv[0]} [--render | --gui [--step]] <map_file>",
             file=sys.stderr,
         )
         return 2
@@ -62,7 +69,9 @@ def main(argv: list[str]) -> int:
             except ImportError as exc:
                 print(f"error: --gui requires tkinter: {exc}", file=sys.stderr)
                 return 1
-            gui_renderer = GraphicalRenderer(sim.graph)
+            gui_renderer = GraphicalRenderer(
+                sim.graph, mode="step" if step_flag else "auto"
+            )
             renderer = gui_renderer
         elif render_flag:
             renderer = Renderer(sim.graph, use_color=sys.stderr.isatty())

@@ -7,6 +7,13 @@ toward a restricted zone). Zone fill color follows the map's ``color=``
 metadata; the zone type is signaled by the outline (restricted → red,
 priority → green, blocked → gray).
 
+Two playback modes:
+
+- **auto** (default) — one turn every ``turn_delay_ms``. Space pauses
+  and resumes. While paused, Space or Right/N advances one turn.
+- **step** — waits for a keypress before advancing every turn. Useful
+  when demoing to a reviewer.
+
 ``tkinter`` is stdlib but can be absent from stripped-down Python
 builds. This module is imported lazily by ``main.py`` so the rest of
 the package works even where Tk is unavailable.
@@ -15,6 +22,7 @@ the package works even where Tk is unavailable.
 from __future__ import annotations
 
 import math
+import sys
 import tkinter as tk
 from collections import defaultdict
 
@@ -24,7 +32,7 @@ from fly_in.zone import ZoneType
 _WINDOW_W: int = 1000
 _WINDOW_H: int = 720
 _PAD: int = 60
-_HEADER_H: int = 60
+_HEADER_H: int = 76
 _ZONE_R: int = 26
 _DRONE_R: int = 8
 _TURN_DELAY_MS: int = 500
@@ -56,9 +64,20 @@ _EDGE_FILL: str = "#7f8c8d"
 class GraphicalRenderer:
     """Tk canvas renderer. Duck-types the terminal :class:`Renderer` API."""
 
-    def __init__(self, graph: Graph, turn_delay_ms: int = _TURN_DELAY_MS) -> None:
+    def __init__(
+        self,
+        graph: Graph,
+        turn_delay_ms: int = _TURN_DELAY_MS,
+        mode: str = "auto",
+    ) -> None:
+        if mode not in {"auto", "step"}:
+            raise ValueError(f"mode must be 'auto' or 'step', got {mode!r}")
         self._graph = graph
         self._delay = turn_delay_ms
+        self._mode = mode
+        self._paused = mode == "step"
+        self._quit = False
+
         self._root = tk.Tk()
         self._root.title("Fly-In")
         self._root.geometry(f"{_WINDOW_W}x{_WINDOW_H}")
@@ -68,24 +87,106 @@ class GraphicalRenderer:
         self._canvas.pack(fill="both", expand=True)
         self._pixel: dict[str, tuple[int, int]] = self._compute_layout()
 
+        self._advance_var = tk.IntVar(master=self._root, value=0)
+        # Space is contextual: pause/resume in auto mode, step in step mode.
+        self._root.bind("<space>", self._on_space)
+        # Explicit step keys always advance one turn (and pause auto mode).
+        self._root.bind("<Right>", self._on_step)
+        self._root.bind("n", self._on_step)
+        self._root.bind("N", self._on_step)
+        # Toggle pause explicitly (auto mode only — no-op in step mode).
+        self._root.bind("p", self._on_pause_toggle)
+        self._root.bind("P", self._on_pause_toggle)
+        # Quit shortcuts.
+        self._root.bind("q", self._on_quit)
+        self._root.bind("<Escape>", self._on_quit)
+        # Handle window close before mainloop is entered.
+        self._root.protocol("WM_DELETE_WINDOW", self._on_quit)
+
+    # ----------------------------------------------------- public API
+
     def render_turn(
         self, turn_idx: int, total_turns: int, positions: dict[int, str]
     ) -> None:
-        """Redraw the canvas for the given turn and pause for the animation delay."""
+        """Redraw the canvas for the given turn and wait before advancing."""
         self._draw(turn_idx, total_turns, positions)
-        self._wait_ms(self._delay)
+        self._await_advance()
 
     def wait_close(self) -> None:
         """Keep the window open until the user closes it."""
+        if self._quit:
+            return
         self._canvas.create_text(
             _WINDOW_W // 2, _WINDOW_H - 20,
-            text="Simulation complete — close window to exit",
+            text="Simulation complete — press Q or close the window",
             font=("TkDefaultFont", 11, "italic"),
             fill="#2c3e50",
         )
-        self._root.mainloop()
+        try:
+            self._root.mainloop()
+        except tk.TclError:
+            pass
 
-    # -------------------------------------------------------------- internals
+    # ----------------------------------------------------- key handlers
+
+    def _on_space(self, _event: object = None) -> None:
+        if self._mode == "auto":
+            self._paused = not self._paused
+        self._advance_var.set(self._advance_var.get() + 1)
+
+    def _on_step(self, _event: object = None) -> None:
+        if self._mode == "auto":
+            self._paused = True
+        self._advance_var.set(self._advance_var.get() + 1)
+
+    def _on_pause_toggle(self, _event: object = None) -> None:
+        if self._mode == "auto":
+            self._paused = not self._paused
+            self._advance_var.set(self._advance_var.get() + 1)
+
+    def _on_quit(self, _event: object = None) -> None:
+        self._quit = True
+        # Unblock any pending wait_variable.
+        try:
+            self._advance_var.set(self._advance_var.get() + 1)
+        except tk.TclError:
+            pass
+        try:
+            self._root.destroy()
+        except tk.TclError:
+            pass
+
+    # ----------------------------------------------------- timing
+
+    def _await_advance(self) -> None:
+        """Block until the next turn should render.
+
+        Auto mode without pause schedules a timer; a keypress (or the
+        timer, whichever fires first) unblocks. Step mode / paused waits
+        for a keypress only.
+        """
+        if self._quit:
+            self._exit()
+        after_id: str | None = None
+        if self._mode == "auto" and not self._paused:
+            after_id = self._root.after(self._delay, self._on_step)
+        try:
+            self._root.wait_variable(self._advance_var)
+        except tk.TclError:
+            self._exit()
+        if after_id is not None:
+            try:
+                self._root.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        if self._quit:
+            self._exit()
+
+    def _exit(self) -> None:
+        """Terminate the process — the window was closed mid-simulation."""
+        sys.exit(0)
+
+    # ----------------------------------------------------- layout
 
     def _compute_layout(self) -> dict[str, tuple[int, int]]:
         zones = list(self._graph.zones)
@@ -106,6 +207,8 @@ class GraphicalRenderer:
             pixel[zone.name] = (px, py)
         return pixel
 
+    # ----------------------------------------------------- drawing
+
     def _draw(
         self, turn_idx: int, total_turns: int, positions: dict[int, str]
     ) -> None:
@@ -118,8 +221,12 @@ class GraphicalRenderer:
             f"delivered {delivered} / {len(positions)}"
         )
         self._canvas.create_text(
-            _WINDOW_W // 2, 30, text=header,
+            _WINDOW_W // 2, 26, text=header,
             font=("TkDefaultFont", 16, "bold"), fill="#2c3e50",
+        )
+        self._canvas.create_text(
+            _WINDOW_W // 2, 54, text=self._status_text(),
+            font=("TkDefaultFont", 10), fill="#7f8c8d",
         )
 
         # Connections first, so zones sit on top.
@@ -178,6 +285,16 @@ class GraphicalRenderer:
                     mx + perp_x * offset, my + perp_y * offset, drone_id
                 )
 
+    def _status_text(self) -> str:
+        if self._mode == "step":
+            return "STEP mode — Space / N / → to advance, Q to quit"
+        if self._paused:
+            return "AUTO — PAUSED — Space to resume, N / → to step, Q to quit"
+        return (
+            f"AUTO — {self._delay} ms/turn — "
+            "Space to pause, N / → to step, Q to quit"
+        )
+
     def _outline_for(self, zone_type: ZoneType) -> tuple[str, int]:
         if zone_type is ZoneType.RESTRICTED:
             return "#c0392b", 3
@@ -205,9 +322,3 @@ class GraphicalRenderer:
             x, y, text=str(drone_id),
             fill=_DRONE_TEXT, font=("TkDefaultFont", 8, "bold"),
         )
-
-    def _wait_ms(self, ms: int) -> None:
-        """Sleep for ``ms`` ms while keeping the Tk event loop responsive."""
-        var = tk.IntVar()
-        self._root.after(ms, lambda: var.set(1))
-        self._root.wait_variable(var)

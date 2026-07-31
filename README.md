@@ -31,6 +31,7 @@ make visual                   # same, plus the colored per-turn snapshot
 make visual MAP=maps/hard/03_ultimate_challenge.txt
 make gui                      # open a tkinter window and animate the run
 make gui MAP=maps/hard/03_ultimate_challenge.txt
+make gui-step                 # same window, but waits for a keypress each turn
 make debug MAP=maps/…         # run under pdb
 make lint                     # flake8 + mypy (project-required flags)
 make lint-strict              # flake8 + mypy --strict
@@ -136,7 +137,19 @@ render plain (per SPEC, color is "any single-word string").
 ### Graphical (`--gui` / `make gui`)
 
 Opens a tkinter window that animates the simulation turn by turn (500 ms
-per turn). Layout:
+per turn). Add `--step` (`make gui-step`) to advance manually — useful
+when walking a reviewer through the run.
+
+**Keybindings while the window is open:**
+
+| Key | Action |
+|---|---|
+| Space | Auto: pause/resume. Step: advance one turn. |
+| N or → | Advance one turn (pauses auto mode). |
+| P | Toggle pause (auto mode). |
+| Q or Esc | Quit. |
+
+Layout:
 
 - **Zones** are drawn as filled circles at their `(x, y)` map
   coordinates (auto-scaled to fit the window; Y is flipped so map-up is
