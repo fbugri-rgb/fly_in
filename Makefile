@@ -1,7 +1,7 @@
 PYTHON  ?= python3
 MAP     ?= maps/easy/01_linear_path.txt
 
-.PHONY: install run visual gui gui-step debug clean lint lint-strict test
+.PHONY: install run visual gui step debug clean lint lint-strict test
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -15,7 +15,7 @@ visual:
 gui:
 	$(PYTHON) main.py --gui $(MAP)
 
-gui-step:
+step:
 	$(PYTHON) main.py --gui --step $(MAP)
 
 debug:
